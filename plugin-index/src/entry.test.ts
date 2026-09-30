@@ -3,9 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
+  bucketOf,
   copyPackage,
   entryDir,
   entryKey,
+  nameDir,
   packageFiles,
   packageIntegrity,
   parseEntryPath,
@@ -28,26 +30,49 @@ const pkg = (name: string, deps: Record<string, string> = {}) =>
   JSON.stringify({ name, version: "1.0.0", dependencies: deps });
 
 describe("entry paths", () => {
-  it("spell the name, the version and the first 16 hex digits of the integrity", () => {
+  it("spell the bucket, the name, the version and the first 16 hex digits of the integrity", () => {
     expect(entryKey(INTEGRITY)).toBe("fedcba9876543210");
     expect(entryKey("sha512-abc")).toBeNull();
     expect(entryDir("@acme/widgets", "1.2.3", INTEGRITY)).toBe(
-      "@acme/widgets/1.2.3/fedcba9876543210",
+      "@acme/wi/dg/widgets/1.2.3/fedcba9876543210",
     );
     expect(() => entryDir("solo", "1.0.0", "sha256-XYZ")).toThrow("not a sha256 integrity");
   });
 
-  it("read back, scoped or not", () => {
-    expect(parseEntryPath("@acme/widgets/1.2.3/fedcba9876543210/manifest.toml")).toEqual({
+  it("file a name in the bucket its name spells", () => {
+    // The same vectors run in PenguinHarness's plugin store tests: one rule, two copies.
+    // There they carry the store's `packages/` root; here the root is the caller's.
+    const vectors: Array<[string, string]> = [
+      ["a", "1/a"],
+      ["ab", "2/ab"],
+      ["abc", "3/a/abc"],
+      ["abcd", "ab/cd/abcd"],
+      ["Sandbox-Bwrap", "sa/nd/Sandbox-Bwrap"],
+      ["@penguinharness/x", "@penguinharness/1/x"],
+      ["@penguinharness/fs", "@penguinharness/2/fs"],
+      ["@penguinharness/git", "@penguinharness/3/g/git"],
+      ["@penguinharness/sandbox-bwrap", "@penguinharness/sa/nd/sandbox-bwrap"],
+    ];
+    for (const [name, want] of vectors) expect(nameDir(name)).toBe(want);
+    expect(bucketOf("@penguinharness/sandbox-bwrap")).toEqual(["sa", "nd"]);
+  });
+
+  it("read back, scoped or not, in a bucket of one level or two", () => {
+    expect(parseEntryPath("@acme/wi/dg/widgets/1.2.3/fedcba9876543210/manifest.toml")).toEqual({
       name: "@acme/widgets",
+      bucket: ["wi", "dg"],
       version: "1.2.3",
       key: "fedcba9876543210",
       file: "manifest.toml",
     });
-    expect(parseEntryPath("solo/0.1.0/fedcba9876543210/package/dist/a.js")?.file).toBe(
-      "package/dist/a.js",
-    );
-    expect(parseEntryPath("solo/0.1.0/manifest.toml")).toBeNull();
+    expect(parseEntryPath("2/fs/0.1.0/fedcba9876543210/package/dist/a.js")).toEqual({
+      name: "fs",
+      bucket: ["2"],
+      version: "0.1.0",
+      key: "fedcba9876543210",
+      file: "package/dist/a.js",
+    });
+    expect(parseEntryPath("so/lo/solo/0.1.0/manifest.toml")).toBeNull();
   });
 });
 

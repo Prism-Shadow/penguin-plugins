@@ -1,9 +1,10 @@
 /**
  * An entry's `manifest.toml`, and the only thing that decides whether one is well-formed.
  *
- * The manifest sits at `plugins/<npm name>/<version>/<key>/manifest.toml`, and the path
- * is checked three ways: it spells the package's name, its version, and the first 16 hex
- * digits of its `integrity`. So a new version is a new directory, a new content of one
+ * The manifest sits at `packages/[<@scope>/]<bucket>/<name>/<version>/<key>/manifest.toml`,
+ * and the path is checked four ways: it spells the package's name, the bucket that name
+ * files under (see the entry module), its version, and the first 16 hex digits of its
+ * `integrity`. So a new version is a new directory, a new content of one
  * version is another directory beside it, and nothing about an entry can change without
  * the change showing up as a move.
  *
@@ -13,7 +14,16 @@
 import { parse as parseToml } from "smol-toml";
 import semver from "semver";
 import { checkAuthor } from "./author.js";
-import { entryDir, entryKey, INTEGRITY, isPackageName, MANIFEST_FILE } from "./entry.js";
+import {
+  bucketOf,
+  entryDir,
+  entryKey,
+  INTEGRITY,
+  isPackageName,
+  MANIFEST_FILE,
+  nameDir,
+  parseEntryPath,
+} from "./entry.js";
 import { checkLicense } from "./license.js";
 import {
   CATEGORIES,
@@ -24,7 +34,7 @@ import {
 } from "./vocabulary.js";
 
 /** The directory of the index repository that holds the entries. */
-export const PLUGINS_DIR = "plugins";
+export const PACKAGES_DIR = "packages";
 
 export interface Manifest {
   /** npm specifier — the name an operator puts into a Project's `[plugins]` table. */
@@ -79,9 +89,9 @@ export class ManifestError extends Error {
   }
 }
 
-/** `@scope/pkg`, `1.2.3`, `sha256-…` ⇒ `plugins/@scope/pkg/1.2.3/<key>/manifest.toml`. */
+/** `@scope/widgets`, `1.2.3`, `sha256-…` ⇒ `packages/@scope/wi/dg/widgets/1.2.3/<key>/manifest.toml`. */
 export function manifestPathFor(name: string, version: string, integrity: string): string {
-  return `${PLUGINS_DIR}/${entryDir(name, version, integrity)}/${MANIFEST_FILE}`;
+  return `${PACKAGES_DIR}/${entryDir(name, version, integrity)}/${MANIFEST_FILE}`;
 }
 
 function asStringArray(value: unknown): string[] | null {
@@ -127,12 +137,19 @@ export function parseManifest(source: string, file: string): Manifest {
     problems.push(`"integrity" must be sha256- followed by 64 lowercase hex digits`);
   }
 
-  // The path spells the entry: its name, its version and its content, each checked.
+  // The path spells the entry: its bucket, its name, its version and its content, each checked.
   if (name !== null && isPackageName(name)) {
     const posix = file.split("\\").join("/");
-    const under = `${PLUGINS_DIR}/${name}/`;
+    const under = `${PACKAGES_DIR}/${nameDir(name)}/`;
     if (!posix.startsWith(under)) {
-      problems.push(`a manifest for "${name}" must live under ${under}`);
+      const filed = posix.startsWith(`${PACKAGES_DIR}/`)
+        ? parseEntryPath(posix.slice(PACKAGES_DIR.length + 1))
+        : null;
+      problems.push(
+        filed !== null && filed.name === name
+          ? `the path files "${name}" under bucket ${filed.bucket.join("/")}, its name spells ${bucketOf(name).join("/")}: it must live under ${under}`
+          : `a manifest for "${name}" must live under ${under}`,
+      );
     } else {
       const [dirVersion, dirKey, leaf, ...rest] = posix.slice(under.length).split("/");
       if (leaf !== MANIFEST_FILE || rest.length > 0) {

@@ -10,6 +10,7 @@ export {
 } from "./archive.js";
 export { checkAuthor } from "./author.js";
 export {
+  bucketOf,
   copyPackage,
   entryDir,
   entryKey,
@@ -19,6 +20,7 @@ export {
   KEY_LENGTH,
   LOCK_FILE,
   MANIFEST_FILE,
+  nameDir,
   PACKAGE_DIR,
   packageFiles,
   packageIntegrity,
@@ -40,8 +42,8 @@ export {
 export {
   ManifestError,
   manifestPathFor,
+  PACKAGES_DIR,
   parseManifest,
-  PLUGINS_DIR,
   type Manifest,
 } from "./manifest.js";
 export * from "./vocabulary.js";

@@ -1,10 +1,17 @@
 /**
  * An entry: one package at one version with one content, the unit both trees are made of.
  *
- * The index repository's `plugins/` subtree and a machine's plugin store
- * (`<data root>/plugin-store/`) have one shape. An entry lives at
+ * The index repository's `packages/` subtree and a machine's plugin store
+ * (`<data root>/plugin-store/packages/`) have one shape. An entry lives at
  *
- *   <npm name>/<version>/<first 16 hex digits of its integrity>/
+ *   [<@scope>/]<bucket>/<name>/<version>/<first 16 hex digits of its integrity>/
+ *
+ * The bucket keeps every directory narrow however many plugins there are. It is read off
+ * the name without its scope, lower-cased, the way the crates.io index files a crate: a
+ * name of 1 or 2 characters sits in `1` or `2`, one of 3 in `3/<first character>`, a
+ * longer one in `<characters 1–2>/<characters 3–4>` — `@penguinharness/sandbox-bwrap` is
+ * under `@penguinharness/sa/nd/sandbox-bwrap/`. PenguinHarness has a line-for-line copy of
+ * this rule (`scripts/plugin-entry.mjs`); both test the same path vectors.
  *
  * and holds `manifest.toml` (the index manifest, `integrity` required) and
  * `package-lock.json` (the lock its package is installed by). The store adds `package/`
@@ -12,8 +19,8 @@
  * the repository ignores those two, so the repository is a store without package data and
  * a store is a checkout of it with the data filled in.
  *
- * The path spells the entry: its name, its version and its content. Two versions of one
- * name, or two contents of one version, are two entries.
+ * The path spells the entry: its bucket, its name, its version and its content. Two versions
+ * of one name, or two contents of one version, are two entries.
  */
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -44,16 +51,33 @@ export function entryKey(integrity: string): string | null {
   return INTEGRITY.exec(integrity)?.[1]?.slice(0, KEY_LENGTH) ?? null;
 }
 
-/** An entry's directory, relative to the tree root: `<name>/<version>/<key>`. */
+/** The bucket directories of a package name, as path segments (see the header). */
+export function bucketOf(name: string): string[] {
+  const bare = (name.startsWith("@") ? name.slice(name.indexOf("/") + 1) : name).toLowerCase();
+  if (bare.length <= 2) return [String(bare.length)];
+  if (bare.length === 3) return ["3", bare[0]!];
+  return [bare.slice(0, 2), bare.slice(2, 4)];
+}
+
+/** Where a name's entries sit, relative to the tree root: `[<@scope>/]<bucket>/<name>`. */
+export function nameDir(name: string): string {
+  const parts = name.split("/");
+  const scope = parts.length === 2 ? [parts[0]!] : [];
+  return [...scope, ...bucketOf(name), parts[parts.length - 1]!].join("/");
+}
+
+/** An entry's directory, relative to the tree root: `<name's directory>/<version>/<key>`. */
 export function entryDir(name: string, version: string, integrity: string): string {
   const key = entryKey(integrity);
   if (key === null) throw new Error(`'${integrity}' is not a sha256 integrity`);
-  return `${name}/${version}/${key}`;
+  return `${nameDir(name)}/${version}/${key}`;
 }
 
 /** Where an entry's parts sit, as read off a path relative to the tree root. */
 export interface EntryPath {
   name: string;
+  /** The bucket directories the path files the name under, as written. */
+  bucket: string[];
   version: string;
   key: string;
   /** The path inside the entry: `manifest.toml`, `package-lock.json`, `package/…`. */
@@ -61,19 +85,26 @@ export interface EntryPath {
 }
 
 /**
- * Reads `<name>/<version>/<key>/<file…>` (posix, relative to the tree root). Null when
- * the path is too short to name an entry and a file in it. The segments are not
- * validated here — that is the manifest check's job, which reports what is wrong.
+ * Reads `[<@scope>/]<bucket>/<name>/<version>/<key>/<file…>` (posix, relative to the tree
+ * root). The bucket is one directory when it is `1` or `2` and two otherwise. Null when
+ * the path is too short to name an entry and a file in it. The segments are not validated
+ * here — that is the manifest check's job, which reports what is wrong, a bucket the name
+ * does not spell included.
  */
 export function parseEntryPath(rel: string): EntryPath | null {
   const parts = rel.split("/");
-  const nameParts = parts[0]?.startsWith("@") ? 2 : 1;
-  if (parts.length < nameParts + 3) return null;
+  const scope = parts[0]?.startsWith("@") ? [parts[0]] : [];
+  const first = parts[scope.length];
+  if (first === undefined) return null;
+  const bucketParts = first === "1" || first === "2" ? 1 : 2;
+  const at = scope.length + bucketParts;
+  if (parts.length < at + 4) return null;
   return {
-    name: parts.slice(0, nameParts).join("/"),
-    version: parts[nameParts]!,
-    key: parts[nameParts + 1]!,
-    file: parts.slice(nameParts + 2).join("/"),
+    name: [...scope, parts[at]!].join("/"),
+    bucket: parts.slice(scope.length, at),
+    version: parts[at + 1]!,
+    key: parts[at + 2]!,
+    file: parts.slice(at + 3).join("/"),
   };
 }
 

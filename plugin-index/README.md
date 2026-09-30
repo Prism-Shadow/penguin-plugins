@@ -9,14 +9,17 @@ implementation.
 ## An entry
 
 ```
-<npm name>/<version>/<first 16 hex digits of integrity>/
+[<@scope>/]<bucket>/<name>/<version>/<first 16 hex digits of integrity>/
   manifest.toml        the index manifest; `integrity` required
   package-lock.json    the lock the package is installed from
   package/             the installed package, every dependency inside it   (store only)
-  .stored              when and from where it was stored                    (store only)
+  .stored              the completion marker                                (store only)
 ```
 
-The index repository keeps the first two under `plugins/`; a store keeps all four.
+The index repository keeps the first two under `packages/`; a store keeps what it runs
+under its own `packages/`. The bucket (`bucketOf`, `nameDir`) is read off the name without
+its scope: `1` or `2` for a name of that length, `3/<first character>` for three
+characters, `<characters 1–2>/<characters 3–4>` otherwise.
 
 ## What it exports
 

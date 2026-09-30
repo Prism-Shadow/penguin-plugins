@@ -16,7 +16,7 @@ owners = ["ada"]
 integrity = "${INTEGRITY}"
 `;
 
-const FILE = "plugins/@acme/widgets/1.2.3/0123456789abcdef/manifest.toml";
+const FILE = "packages/@acme/wi/dg/widgets/1.2.3/0123456789abcdef/manifest.toml";
 
 function problemsOf(source: string, file = FILE): string[] {
   try {
@@ -39,25 +39,31 @@ describe("parseManifest", () => {
 
   it("requires the path to spell the name", () => {
     expect(
-      problemsOf(VALID, "plugins/widgets/1.2.3/0123456789abcdef/manifest.toml"),
-    ).toContainEqual(expect.stringContaining("must live under plugins/@acme/widgets/"));
+      problemsOf(VALID, "packages/wi/dg/widgets/1.2.3/0123456789abcdef/manifest.toml"),
+    ).toContainEqual(expect.stringContaining("must live under packages/@acme/wi/dg/widgets/"));
+  });
+
+  it("requires the path to spell the bucket", () => {
+    expect(
+      problemsOf(VALID, "packages/@acme/zz/zz/widgets/1.2.3/0123456789abcdef/manifest.toml"),
+    ).toEqual([expect.stringContaining("under bucket zz/zz, its name spells wi/dg")]);
   });
 
   it("requires the path to spell the version", () => {
-    expect(problemsOf(VALID, "plugins/@acme/widgets/1.2.4/0123456789abcdef/manifest.toml")).toEqual(
-      [expect.stringContaining("the path says version 1.2.4, the manifest says 1.2.3")],
-    );
+    expect(
+      problemsOf(VALID, "packages/@acme/wi/dg/widgets/1.2.4/0123456789abcdef/manifest.toml"),
+    ).toEqual([expect.stringContaining("the path says version 1.2.4, the manifest says 1.2.3")]);
   });
 
   it("requires the path to spell the first 16 hex digits of the integrity", () => {
-    expect(problemsOf(VALID, "plugins/@acme/widgets/1.2.3/0123456789abcdee/manifest.toml")).toEqual(
-      [expect.stringContaining("is not the first 16 hex digits")],
-    );
+    expect(
+      problemsOf(VALID, "packages/@acme/wi/dg/widgets/1.2.3/0123456789abcdee/manifest.toml"),
+    ).toEqual([expect.stringContaining("is not the first 16 hex digits")]);
   });
 
   it("requires an entry directory between the version and the manifest", () => {
-    expect(problemsOf(VALID, "plugins/@acme/widgets/1.2.3/manifest.toml")).toContainEqual(
-      expect.stringContaining("must be plugins/@acme/widgets/<version>/<key>/manifest.toml"),
+    expect(problemsOf(VALID, "packages/@acme/wi/dg/widgets/1.2.3/manifest.toml")).toContainEqual(
+      expect.stringContaining("must be packages/@acme/wi/dg/widgets/<version>/<key>/manifest.toml"),
     );
   });
 
@@ -111,7 +117,7 @@ surprise = 1
   it("names the one place an entry's manifest may live", () => {
     expect(manifestPathFor("@acme/widgets", "1.2.3", INTEGRITY)).toBe(FILE);
     expect(manifestPathFor("solo", "0.1.0", INTEGRITY)).toBe(
-      "plugins/solo/0.1.0/0123456789abcdef/manifest.toml",
+      "packages/so/lo/solo/0.1.0/0123456789abcdef/manifest.toml",
     );
   });
 });
